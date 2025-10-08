@@ -1,19 +1,21 @@
-# Use Node.js LTS
-FROM node:20
+# Use Node.js LTS image
+FROM node:18
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and install dependencies
+# Copy package files first (for caching)
 COPY package*.json ./
-RUN npm install --production
 
-# Copy all backend code
+# Install dependencies
+RUN npm install
+
+# Copy the rest of the source code
 COPY . .
 
 # Expose backend port
-EXPOSE 5000
+EXPOSE 8080
 
-# Start backend using pm2
-RUN npm install -g pm2
-CMD ["pm2-runtime", "server.js", "--name", "movie-backend"]
+# Start the server
+CMD ["npm", "start"]
+
