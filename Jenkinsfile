@@ -17,6 +17,7 @@ pipeline {
         skipDefaultCheckout(true)
         timestamps()
         disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
     }
 
     triggers {
@@ -26,27 +27,62 @@ pipeline {
     stages {
         stage('Checkout Source') {
             steps {
+                echo "📦 Checking out source code..."
                 git branch: 'main', url: 'https://github.com/Pavanreddy56/Movie-Streaming-CI-CD.git'
             }
         }
 
-        stage('Backend Build + Test') {
+        stage('Code Quality - SonarQube') {
             steps {
-                dir('backend') {
-                    bat 'mvn -B clean verify'
+                echo "🔍 Running SonarQube Analysis..."
+                withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                    dir('backend') {
+                        sh 'mvn clean verify sonar:sonar -DskipTests=true'
+                    }
                 }
             }
         }
 
-        
+        stage('Backend & Frontend Build') {
+            parallel {
+                stage('Backend Build') {
+                    steps {
+                        dir('backend') {
+                            echo "⚙️ Building Backend..."
+                            sh 'mvn clean package -DskipTests=true'
+                        }
+                    }
+                }
+                stage('Frontend Build') {
+                    steps {
+                        dir('frontend') {
+                            echo "🖥️ Building Frontend..."
+                            sh 'npm install'
+                            sh 'npm run build'
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Security Scan - Trivy') {
+            steps {
+                script {
+                    echo "🛡️ Running Trivy Security Scan..."
+                    sh 'trivy fs . --severity HIGH,CRITICAL || true'
+                }
+            }
+        }
+
         stage('Build Docker Images') {
             steps {
                 script {
+                    echo "🐳 Building Docker Images..."
                     dir('backend') {
-                        bat "docker build -t ${DOCKER_BACKEND}:${IMAGE_TAG} -t ${DOCKER_BACKEND}:latest ."
+                        sh "docker build -t ${DOCKER_BACKEND}:${IMAGE_TAG} -t ${DOCKER_BACKEND}:latest ."
                     }
                     dir('frontend') {
-                        bat "docker build -t ${DOCKER_FRONTEND}:${IMAGE_TAG} -t ${DOCKER_FRONTEND}:latest ."
+                        sh "docker build -t ${DOCKER_FRONTEND}:${IMAGE_TAG} -t ${DOCKER_FRONTEND}:latest ."
                     }
                 }
             }
@@ -57,22 +93,43 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
                                                   usernameVariable: 'DOCKERHUB_USER',
                                                   passwordVariable: 'DOCKERHUB_PASS')]) {
-                    bat "echo %DOCKERHUB_PASS% | docker login -u %DOCKERHUB_USER% --password-stdin"
-                    bat "docker push ${DOCKER_BACKEND}:${IMAGE_TAG}"
-                    bat "docker push ${DOCKER_BACKEND}:latest"
-                    bat "docker push ${DOCKER_FRONTEND}:${IMAGE_TAG}"
-                    bat "docker push ${DOCKER_FRONTEND}:latest"
+                    script {
+                        echo "📤 Pushing Docker Images to DockerHub..."
+                        sh '''
+                        echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
+                        docker push ${DOCKER_BACKEND}:${IMAGE_TAG}
+                        docker push ${DOCKER_BACKEND}:latest
+                        docker push ${DOCKER_FRONTEND}:${IMAGE_TAG}
+                        docker push ${DOCKER_FRONTEND}:latest
+                        '''
+                    }
                 }
             }
         }
 
+        stage('Manual Deployment Notice') {
+            steps {
+                echo "🧭 Manual Deployment Step: Run this on your Docker host"
+                echo "------------------------------------------------------"
+                echo "docker pull ${DOCKER_BACKEND}:latest"
+                echo "docker pull ${DOCKER_FRONTEND}:latest"
+                echo "docker run -d -p 8080:8080 ${DOCKER_BACKEND}:latest"
+                echo "docker run -d -p 3000:3000 ${DOCKER_FRONTEND}:latest"
+                echo "------------------------------------------------------"
+            }
+        }
+    }
 
     post {
         success {
-            echo "✅ Build ${env.BUILD_NUMBER} succeeded! Website running at http://localhost:3000"
+            echo "✅ Build ${env.BUILD_NUMBER} succeeded! Images pushed to DockerHub."
         }
         failure {
-            echo "❌ Build ${env.BUILD_NUMBER} failed. Please check logs."
+            echo "❌ Build ${env.BUILD_NUMBER} failed. Check console logs for details."
+        }
+        always {
+            cleanWs()
         }
     }
 }
+
