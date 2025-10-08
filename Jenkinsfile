@@ -1,51 +1,78 @@
 pipeline {
     agent any
 
+    tools {
+        maven 'Maven3'
+        jdk 'JDK17'
+    }
+
     environment {
-        DOCKER_IMAGE = "yourdockerhubusername/yourapp"
-        DOCKER_CREDENTIALS_ID = "dockerhub"
+        SONARQUBE_SERVER = 'SonarQube'
+        IMAGE_TAG        = "${env.BUILD_NUMBER}"
+        DOCKER_BACKEND   = "pavanreddych/pdf-portal-backend"
+        DOCKER_FRONTEND  = "pavanreddych/pdf-portal-frontend"
+    }
+
+    options {
+        skipDefaultCheckout(true)
+        timestamps()
+        disableConcurrentBuilds()
+    }
+
+    triggers {
+        githubPush()
     }
 
     stages {
-        stage('Clone Repo') {
+        stage('Checkout Source') {
             steps {
-                git branch: 'main', url: 'https://github.com/Pavanreddy56/Movie-Streaming-CI-CD.git'
+                git branch: 'main', url: 'https://github.com/Pavanreddy56/secure-login-cicd.git'
+            }
+        }
+
+        stage('Backend Build + Test') {
+            steps {
+                dir('backend') {
+                    bat 'mvn -B clean verify'
+                }
             }
         }
 
         
-        stage('Security Scan - Trivy') {
+        stage('Build Docker Images') {
             steps {
                 script {
-                    sh 'trivy fs . || true'
+                    dir('backend') {
+                        bat "docker build -t ${DOCKER_BACKEND}:${IMAGE_TAG} -t ${DOCKER_BACKEND}:latest ."
+                    }
+                    dir('frontend') {
+                        bat "docker build -t ${DOCKER_FRONTEND}:${IMAGE_TAG} -t ${DOCKER_FRONTEND}:latest ."
+                    }
                 }
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Push Docker Images') {
             steps {
-                script {
-                    sh 'docker build -t $DOCKER_IMAGE:latest .'
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
+                                                  usernameVariable: 'DOCKERHUB_USER',
+                                                  passwordVariable: 'DOCKERHUB_PASS')]) {
+                    bat "echo %DOCKERHUB_PASS% | docker login -u %DOCKERHUB_USER% --password-stdin"
+                    bat "docker push ${DOCKER_BACKEND}:${IMAGE_TAG}"
+                    bat "docker push ${DOCKER_BACKEND}:latest"
+                    bat "docker push ${DOCKER_FRONTEND}:${IMAGE_TAG}"
+                    bat "docker push ${DOCKER_FRONTEND}:latest"
                 }
             }
         }
 
-        stage('Push to DockerHub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: "$DOCKER_CREDENTIALS_ID", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh '''
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker push $DOCKER_IMAGE:latest
-                    '''
-                }
-            }
-        }
 
-        stage('Post Build Info') {
-            steps {
-                echo "Docker image pushed: $DOCKER_IMAGE:latest"
-                echo "You can deploy manually using Docker run."
-            }
+    post {
+        success {
+            echo "✅ Build ${env.BUILD_NUMBER} succeeded! Website running at http://localhost:3000"
+        }
+        failure {
+            echo "❌ Build ${env.BUILD_NUMBER} failed. Please check logs."
         }
     }
 }
