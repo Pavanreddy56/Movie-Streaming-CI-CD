@@ -1,13 +1,17 @@
-# Build stage
-FROM node:20 AS build
+# Step 1: Build the Next.js app
+FROM node:18 AS builder
+
 WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
 RUN npm run build
 
-# Production stage
-FROM nginx:alpine
-COPY --from=build /app/out /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+# Step 2: Run using lightweight Node image
+FROM node:18-alpine
+
+WORKDIR /app
+COPY --from=builder /app ./
+
+EXPOSE 3000
+CMD ["npm", "start"]
