@@ -9,19 +9,11 @@ pipeline {
     stages {
         stage('Clone Repo') {
             steps {
-                git branch: 'main', url: 'https://github.com/yourusername/yourrepo.git'
+                git branch: 'main', url: 'https://github.com/Pavanreddy56/Movie-Streaming-CI-CD.git'
             }
         }
 
-        stage('Code Quality - SonarQube') {
-            steps {
-                script {
-                    sh 'echo "Running SonarQube Scan..."'
-                    // Example: sonar-scanner -Dsonar.projectKey=myproject -Dsonar.host.url=http://<your-sonarqube-ip>:9000 -Dsonar.login=<token>
-                }
-            }
-        }
-
+        
         stage('Security Scan - Trivy') {
             steps {
                 script {
