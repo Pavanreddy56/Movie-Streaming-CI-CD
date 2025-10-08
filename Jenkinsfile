@@ -26,7 +26,7 @@ pipeline {
     stages {
         stage('Checkout Source') {
             steps {
-                git branch: 'main', url: 'https://github.com/Pavanreddy56/secure-login-cicd.git'
+                git branch: 'main', url: 'https://github.com/Pavanreddy56/Movie-Streaming-CI-CD.git'
             }
         }
 
