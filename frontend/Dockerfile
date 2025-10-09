@@ -1,19 +1,26 @@
-# Use Node.js LTS alpine image
-FROM node:18-alpine
+# Stage 1: Build frontend
+FROM node:20-alpine AS frontend-builder
 
-# Set working directory
 WORKDIR /app
 
 # Copy package files and install dependencies
 COPY package*.json ./
-RUN npm ci --production
+RUN npm ci
 
-# Copy all backend code
+# Copy all frontend files
 COPY . .
 
-# Expose port (backend server port)
-EXPOSE 5000
+# Build frontend
+RUN npm run build
 
-# Start server
-CMD ["node", "server.js"]
+# Stage 2: Serve with Nginx
+FROM nginx:stable-alpine
 
+# Copy built files from previous stage
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
+
+# Expose port 80
+EXPOSE 80
+
+# Start Nginx
+CMD ["nginx", "-g", "daemon off;"]
