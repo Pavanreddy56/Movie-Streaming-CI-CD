@@ -1,15 +1,14 @@
-# Stage 1: Build Frontend
+# Stage 1: Build frontend
 FROM node:20-alpine AS frontend-builder
-
-WORKDIR /app/frontend    # <- frontend folder
-COPY frontend/package*.json ./
+WORKDIR /app
+COPY package*.json .       # copy only frontend package files if building from inside frontend folder
 RUN npm ci
-COPY frontend ./
-RUN npm run build        # this will now correctly find index.html
+COPY . .                   # copy current folder content
+RUN npm run build
 
-# Stage 2: Production Frontend
-FROM nginx:stable-alpine AS frontend-prod
-COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
+# Stage 2: Serve with Nginx
+FROM nginx:stable-alpine
+COPY --from=frontend-builder /app/dist /usr/share/nginx/html
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 
