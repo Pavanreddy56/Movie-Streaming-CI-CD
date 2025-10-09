@@ -1,37 +1,42 @@
-version: "3.9"
-
+version: "3.8"
 services:
-  backend:
-    build: ./backend
-    container_name: movie_backend
-    ports:
-      - "8080:8080"
-    env_file:
-      - ./backend/.env
-    depends_on:
-      - db
-
-  frontend:
-    build: ./frontend
-    container_name: movie_frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080/api
-
   db:
-    image: postgres:14
-    container_name: movie_db
+    image: postgres:15-alpine
     restart: always
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
+      POSTGRES_PASSWORD: examplepassword
       POSTGRES_DB: movie_streaming
     volumes:
       - db_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
 
+  backend:
+    build: ./backend
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_USER: postgres
+      DB_PASSWORD: examplepassword
+      DB_NAME: movie_streaming
+      DB_PORT: 5432
+      JWT_SECRET: mydevsecret
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./backend:/app
+    command: ["node", "server.js"]
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/app
+
 volumes:
   db_data:
-
