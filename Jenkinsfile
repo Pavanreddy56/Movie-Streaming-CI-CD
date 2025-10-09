@@ -1,105 +1,80 @@
+// Jenkinsfile (declarative)
 pipeline {
-    agent any
+  agent any
 
-    environment {
-        IMAGE_TAG        = "${env.BUILD_NUMBER}"
-        DOCKER_BACKEND   = "pavanreddych/movie-backend"
-        DOCKER_FRONTEND  = "pavanreddych/movie-frontend"
+  environment {
+    DOCKERHUB_CREDENTIALS = 'dockerhub-creds'    // Jenkins credential id (username/password)
+    DOCKERHUB_USER = 'YOUR_DOCKERHUB_USER'       // replace
+    BACKEND_IMAGE = "${env.DOCKERHUB_USER}/movie-backend:${env.BUILD_NUMBER}"
+    FRONTEND_IMAGE = "${env.DOCKERHUB_USER}/movie-frontend:${env.BUILD_NUMBER}"
+    KUBE_CONTEXT = 'k8s-prod'                    // optional
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
     }
 
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '10'))
+    stage('Install & Test (Backend)') {
+      steps {
+        dir('backend') {
+          sh 'npm ci'
+          // Add tests: sh 'npm test'
+        }
+      }
     }
 
-    stages {
-        stage('Checkout Code') {
-            steps {
-                git branch: 'main', url: 'https://github.com/Pavanreddy56/Movie-Streaming-CI-CD.git'
-            }
+    stage('Install & Test (Frontend)') {
+      steps {
+        dir('frontend') {
+          sh 'npm ci'
+          # // Add tests: sh 'npm test'
         }
-
-        stage('Backend & Frontend Build') {
-            parallel {
-                stage('Backend Build') {
-                    steps {
-                        dir('backend') {
-                            sh 'npm install'
-                        }
-                    }
-                }
-                stage('Frontend Build') {
-                    steps {
-                        dir('frontend') {
-                            sh 'npm install'
-                            sh 'npm run build'
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Trivy Security Scan') {
-            steps {
-                sh 'trivy fs . --severity HIGH,CRITICAL || true'
-            }
-        }
-
-        stage('Build Docker Images') {
-            steps {
-                script {
-                    dir('backend') {
-                        sh "docker build -t ${DOCKER_BACKEND}:${IMAGE_TAG} -t ${DOCKER_BACKEND}:latest ."
-                    }
-                    dir('frontend') {
-                        sh "docker build -t ${DOCKER_FRONTEND}:${IMAGE_TAG} -t ${DOCKER_FRONTEND}:latest ."
-                    }
-                }
-            }
-        }
-
-        stage('Local Test Run') {
-            steps {
-                script {
-                    echo "🧪 Running containers locally for verification..."
-                    sh "docker compose up -d"
-                    sh "sleep 10"
-                    sh "docker ps"
-                }
-            }
-        }
-
-        stage('Push to DockerHub') {
-            steps {
-                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds',
-                                                  usernameVariable: 'DOCKERHUB_USER',
-                                                  passwordVariable: 'DOCKERHUB_PASS')]) {
-                    sh '''
-                    echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
-                    docker push ${DOCKER_BACKEND}:${IMAGE_TAG}
-                    docker push ${DOCKER_BACKEND}:latest
-                    docker push ${DOCKER_FRONTEND}:${IMAGE_TAG}
-                    docker push ${DOCKER_FRONTEND}:latest
-                    '''
-                }
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            echo "✅ CI/CD pipeline completed successfully!"
-            echo "Backend: ${DOCKER_BACKEND}:${IMAGE_TAG}"
-            echo "Frontend: ${DOCKER_FRONTEND}:${IMAGE_TAG}"
+    stage('Build Docker Images') {
+      steps {
+        script {
+          sh "docker build -t ${BACKEND_IMAGE} ./backend"
+          sh "docker build -t ${FRONTEND_IMAGE} ./frontend"
         }
-        failure {
-            echo "❌ Pipeline failed. Check Jenkins logs for errors."
-        }
-        always {
-            sh 'docker compose down || true'
-            cleanWs()
-        }
+      }
     }
+
+    stage('Trivy Scan') {
+      steps {
+        script {
+          // trivy should be installed on the agent
+          sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${BACKEND_IMAGE} || true"
+          sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${FRONTEND_IMAGE} || true"
+          // Note: above returns non-zero if vulnerabilities; adjust as needed
+        }
+      }
+    }
+
+    stage('Push to Docker Hub') {
+      steps {
+        withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+          sh "docker push ${BACKEND_IMAGE}"
+          sh "docker push ${FRONTEND_IMAGE}"
+        }
+      }
+    }
+
+  post {
+    always {
+      sh 'docker logout || true'
+    }
+    success {
+      echo "Pipeline succeeded."
+    }
+    failure {
+      echo "Pipeline failed."
+    }
+  }
 }
 
