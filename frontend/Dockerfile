@@ -1,17 +1,18 @@
-# Step 1: Build the Next.js app
-FROM node:18 AS builder
-
+# frontend/Dockerfile
+# Build stage
+FROM node:18-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 COPY . .
+# If Next app uses export or build:
 RUN npm run build
+# If using `next export` (static):
+# RUN npm run export
 
-# Step 2: Run using lightweight Node image
-FROM node:18-alpine
-
-WORKDIR /app
-COPY --from=builder /app ./
-
-EXPOSE 3000
-CMD ["npm", "start"]
+# Production stage - serve with nginx
+FROM nginx:stable-alpine
+COPY --from=builder /app/out /usr/share/nginx/html
+# If your Next build outputs .next server or needs server: adjust accordingly.
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
