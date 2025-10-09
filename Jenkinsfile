@@ -2,40 +2,47 @@ pipeline {
   agent any
 
   environment {
-    DOCKERHUB_CREDENTIALS = 'dockerhub-creds'    // Jenkins credential id (username/password)
-    DOCKERHUB_USER = 'pavanreddych'              // replace with your Docker Hub username
+    DOCKERHUB_CREDENTIALS = 'dockerhub-creds'    // Jenkins credential ID (username/password)
+    DOCKERHUB_USER = 'pavanreddych'              // your Docker Hub username
     BACKEND_IMAGE = "${env.DOCKERHUB_USER}/movie-backend:${env.BUILD_NUMBER}"
     FRONTEND_IMAGE = "${env.DOCKERHUB_USER}/movie-frontend:${env.BUILD_NUMBER}"
-    KUBE_CONTEXT = 'k8s-prod'                    // optional
+    KUBE_CONTEXT = 'k8s-prod'                    // optional (for future deployment)
   }
 
   stages {
+
     stage('Checkout') {
       steps {
+        echo "📦 Checking out source code from GitHub..."
         checkout scm
       }
     }
 
     stage('Install & Test (Backend)') {
       steps {
+        echo "⚙️ Installing backend dependencies..."
         dir('backend') {
-          sh 'npm ci'
-          // Add tests if required: sh 'npm test'
+          sh 'npm install'
+          // Run backend tests if needed:
+          // sh 'npm test'
         }
       }
     }
 
     stage('Install & Test (Frontend)') {
       steps {
+        echo "⚙️ Installing frontend dependencies..."
         dir('frontend') {
-          sh 'npm ci'
-          // Add tests if required: sh 'npm test'
+          sh 'npm install'
+          // Run frontend tests if needed:
+          // sh 'npm test'
         }
       }
     }
 
     stage('Build Docker Images') {
       steps {
+        echo "🐳 Building Docker images for backend and frontend..."
         script {
           sh "docker build -t ${BACKEND_IMAGE} ./backend"
           sh "docker build -t ${FRONTEND_IMAGE} ./frontend"
@@ -45,17 +52,18 @@ pipeline {
 
     stage('Trivy Scan') {
       steps {
+        echo "🔍 Running Trivy vulnerability scans..."
         script {
-          // Make sure trivy is installed on the Jenkins agent
+          // Ensure Trivy is installed on the Jenkins agent
           sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${BACKEND_IMAGE} || true"
           sh "trivy image --exit-code 1 --severity HIGH,CRITICAL ${FRONTEND_IMAGE} || true"
-          // Note: above returns non-zero if vulnerabilities are found; adjust as needed
         }
       }
     }
 
     stage('Push to Docker Hub') {
       steps {
+        echo "🚀 Pushing Docker images to Docker Hub..."
         withCredentials([usernamePassword(credentialsId: "${DOCKERHUB_CREDENTIALS}", usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
           sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
           sh "docker push ${BACKEND_IMAGE}"
@@ -63,17 +71,19 @@ pipeline {
         }
       }
     }
-  }
+
+  } // end stages
 
   post {
     always {
       sh 'docker logout || true'
+      echo "🧹 Cleanup done. Docker logged out."
     }
     success {
-      echo "✅ Pipeline succeeded."
+      echo "✅ Pipeline completed successfully!"
     }
     failure {
-      echo "❌ Pipeline failed."
+      echo "❌ Pipeline failed. Check logs for details."
     }
   }
 }
