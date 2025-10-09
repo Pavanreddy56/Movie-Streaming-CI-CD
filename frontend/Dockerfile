@@ -4,16 +4,18 @@ FROM node:20-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Copy package.json and package-lock.json first
+# Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies including devDependencies
+# Ensure latest npm and install dependencies
+RUN npm install -g npm@11.6.2
 RUN npm ci
 
-# Copy source code, public folder, and config
-COPY src ./src
-COPY public ./public
-COPY vite.config.js ./
+# Copy the rest of the frontend source code
+COPY . .
+
+# Add module type for ESM compatibility
+RUN echo '{ "type": "module" }' > package.json
 
 # Build the frontend
 RUN npm run build
@@ -21,14 +23,15 @@ RUN npm run build
 # Stage 2: Serve with Nginx
 FROM nginx:stable-alpine
 
-# Copy built files from builder
+# Copy build output from previous stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy custom Nginx config if you have one (optional)
-# COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy custom nginx config if you have one
+# COPY nginx.conf /etc/nginx/nginx.conf
 
-# Expose port
+# Expose port 80
 EXPOSE 80
 
-# Start Nginx
+# Start Nginx server
 CMD ["nginx", "-g", "daemon off;"]
+
