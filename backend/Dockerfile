@@ -1,21 +1,16 @@
-# Use Node.js LTS image
-FROM node:18
+# backend/Dockerfile
+FROM node:18-alpine AS build
 
-# Set working directory
 WORKDIR /app
-
-# Copy package files first (for caching)
 COPY package*.json ./
+RUN npm ci --production
 
-# Install dependencies
-RUN npm install
-
-# Copy the rest of the source code
 COPY . .
 
-# Expose backend port
-EXPOSE 8080
+# If you have a build step (e.g. TypeScript), run it here:
+# RUN npm run build
 
-# Start the server
-CMD ["npm", "start"]
+EXPOSE 5000
+ENV NODE_ENV=production
 
+CMD ["node", "server.js"]
