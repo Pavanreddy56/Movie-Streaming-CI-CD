@@ -4,7 +4,7 @@ pipeline {
 
   environment {
     DOCKERHUB_CREDENTIALS = 'dockerhub-creds'    // Jenkins credential id (username/password)
-    DOCKERHUB_USER = 'YOUR_DOCKERHUB_USER'       // replace
+    DOCKERHUB_USER = 'pavanreddych'       // replace
     BACKEND_IMAGE = "${env.DOCKERHUB_USER}/movie-backend:${env.BUILD_NUMBER}"
     FRONTEND_IMAGE = "${env.DOCKERHUB_USER}/movie-frontend:${env.BUILD_NUMBER}"
     KUBE_CONTEXT = 'k8s-prod'                    // optional
